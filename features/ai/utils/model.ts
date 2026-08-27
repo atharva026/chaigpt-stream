@@ -1,7 +1,7 @@
 import { google  } from "@ai-sdk/google";
 
 /** Default OpenAI model used when a conversation has no model override. */
-export const DEFAULT_CHAT_MODEL = "gpt-4o-mini";
+export const DEFAULT_CHAT_MODEL = "gemini-3.5-flash-lite";
 
 /**
  * Returns an Google Gemini language model instance for chat completions.
