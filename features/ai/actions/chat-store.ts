@@ -1,12 +1,49 @@
 "use server";
 
-import { isTextUIPart, type UIMessage } from "ai";
-import type { Prisma } from "@/lib/generated/prisma/client";
+import { isTextUIPart, isToolUIPart } from "ai";
+import type { MessageRole, MessageStatus, Prisma } from "@/lib/generated/prisma/client";
 import { prisma } from "@/lib/db";
+import type { ChatUIMessage } from "@/features/ai/tools/types";
 
 /** Extracts plain text from an AI SDK `UIMessage` by joining all text parts. */
-function getMessageText(message: UIMessage) {
+function getMessageText(message: ChatUIMessage) {
   return message.parts.filter(isTextUIPart).map((part) => part.text).join("");
+}
+
+function toPrismaRole(role: ChatUIMessage["role"]): MessageRole {
+  switch (role) {
+    case "assistant":
+      return "ASSISTANT";
+    case "system":
+      return "SYSTEM";
+    default:
+      return "USER";
+  }
+}
+
+function toUIMessageRole(role: MessageRole): ChatUIMessage["role"] {
+  switch (role) {
+    case "ASSISTANT":
+    case "TOOL":
+      return "assistant";
+    case "SYSTEM":
+      return "system";
+    default:
+      return "user";
+  }
+}
+
+function getMessageStatus(message: ChatUIMessage): MessageStatus {
+  const hasToolError = message.parts.some(
+    (part) => isToolUIPart(part) && part.state === "output-error"
+  );
+  const hasText = getMessageText(message).trim().length > 0;
+
+  if (hasToolError && !hasText) {
+    return "ERROR";
+  }
+
+  return "COMPLETE";
 }
 
 /**
@@ -16,8 +53,8 @@ function getMessageText(message: UIMessage) {
 function toUIMessageParts(
   parts: Prisma.JsonValue | null,
   content: string
-): UIMessage["parts"] {
-  const stored = parts as UIMessage["parts"] | null;
+): ChatUIMessage["parts"] {
+  const stored = parts as ChatUIMessage["parts"] | null;
   if (Array.isArray(stored) && stored.length > 0) {
     return stored;
   }
@@ -33,17 +70,19 @@ function toUIMessageParts(
  */
 export async function loadChatMessages(
   conversationId: string
-): Promise<UIMessage[]> {
+): Promise<ChatUIMessage[]> {
   const rows = await prisma.message.findMany({
     where: { conversationId },
     orderBy: { createdAt: "asc" },
   });
 
-  return rows.map((row) => ({
-    id: row.id,
-    role: row.role === "ASSISTANT" ? "assistant" : "user",
-    parts: toUIMessageParts(row.parts, row.content),
-  }));
+  return rows
+    .filter((row) => row.role !== "SYSTEM")
+    .map((row) => ({
+      id: row.id,
+      role: toUIMessageRole(row.role),
+      parts: toUIMessageParts(row.parts, row.content),
+    }));
 }
 
 type SaveChatMessagesOptions = {
@@ -59,7 +98,7 @@ type SaveChatMessagesOptions = {
  */
 export async function saveChatMessages(
   conversationId: string,
-  messages: UIMessage[],
+  messages: ChatUIMessage[],
   options: SaveChatMessagesOptions = {}
 ) {
   const { updateTitle = true } = options;
@@ -68,7 +107,8 @@ export async function saveChatMessages(
     if (message.role === "system") continue;
 
     const content = getMessageText(message);
-    const role = message.role === "assistant" ? "ASSISTANT" : "USER";
+    const role = toPrismaRole(message.role);
+    const status = getMessageStatus(message);
 
     await prisma.message.upsert({
       where: { id: message.id },
@@ -76,14 +116,14 @@ export async function saveChatMessages(
         id: message.id,
         conversationId,
         role,
-        status: "COMPLETE",
+        status,
         content,
         parts: message.parts as Prisma.InputJsonValue,
       },
       update: {
         content,
         parts: message.parts as Prisma.InputJsonValue,
-        status: "COMPLETE",
+        status,
       },
     });
   }

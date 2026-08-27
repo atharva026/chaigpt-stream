@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  MoonIcon,
   MoreHorizontalIcon,
   PencilIcon,
   PinIcon,
   PinOffIcon,
   PlusIcon,
+  SunIcon,
   Trash2Icon,
 } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
@@ -40,8 +42,10 @@ import {
   useConversations,
   useDeleteConversation,
   useUpdateConversation,
+  useCreateConversation,
 } from "@/features/conversation/hooks/use-conversation";
 import { cn } from "@/lib/utils";
+import { useEffect, useState } from "react";
 
 type Conversation = NonNullable<
   ReturnType<typeof useConversations>["data"]
@@ -53,33 +57,34 @@ type Conversation = NonNullable<
 export function AppSidebar() {
   const pathname = usePathname();
   const { data: conversations, isLoading } = useConversations();
+  const createConversation = useCreateConversation();
 
-  
-// Get the active conversation id from the pathname (e.g. /c/123)
-// pathname.split("/")[2] is the third part of the pathname (the conversation id)
-//  firstparam = / , secondparam = c , thirdparam = 123
-  const activeId = pathname.startsWith("/c/")
-    ? pathname.split("/")[2]
-    : undefined;
+  // Get the active conversation id from the pathname (e.g. /c/123)
+  // pathname.split("/")[2] is the third part of the pathname (the conversation id)
+  //  firstparam = / , secondparam = c , thirdparam = 123
+  const activeId = pathname.startsWith("/c/") ? pathname.split("/")[2] : undefined;
 
   return (
     <Sidebar collapsible="icon" variant="inset">
       <SidebarHeader className="gap-2">
         <SidebarMenu>
-          <SidebarMenuItem>
+          <SidebarMenuItem className="mb-4">
             <SidebarMenuButton
               size="lg"
               className="font-semibold tracking-tight"
               render={<Link href="/" />}
             >
-              <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-sm text-primary-foreground">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-sm text-primary-foreground">
                 C
               </span>
-              <span>ChaiGPT</span>
+
+              <span className="truncate group-data-[collapsible=icon]:hidden">
+                ChaiGPT
+              </span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton tooltip="New chat" render={<Link href="/" />}>
+            <SidebarMenuButton tooltip="New chat" onClick={() => createConversation.mutate()}>
               <PlusIcon />
               <span>New chat</span>
             </SidebarMenuButton>
@@ -179,6 +184,9 @@ function ChatItem({
         render={<Link href={`/c/${conversation.id}`} />}
         className={cn(isActive && "font-medium")}
       >
+        {conversation.isPinned && (
+          <PinIcon className="ml-2 h-3 w-3 shrink-0 text-muted-foreground" />
+        )}
         <span className="truncate">{conversation.title}</span>
       </SidebarMenuButton>
 
@@ -227,18 +235,27 @@ function ChatItem({
 /** Footer menu with theme toggle and Clerk user account button. */
 function SidebarFooterMenu() {
   const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  if (!mounted) {
+    return null
+  }
 
   return (
     <SidebarMenu>
       <SidebarMenuItem>
         <Button
           type="button"
-          variant="ghost"
+          variant="outline"
           size="sm"
-          className="w-full justify-start"
+          className="w-fit justify-start py-4!"
           onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
         >
-          Toggle theme
+          {resolvedTheme === "dark" ? <SunIcon /> : <MoonIcon />}
         </Button>
       </SidebarMenuItem>
       <SidebarMenuItem>

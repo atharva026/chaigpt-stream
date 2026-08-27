@@ -1,12 +1,11 @@
 "use client";
 
-import { isTextUIPart, type UIMessage } from "ai";
-import type { ChatStatus } from "ai";
+import { isTextUIPart, type ChatStatus } from "ai";
+import type { ChatUIMessage } from "@/features/ai/tools/types";
 
 import {
   Conversation,
   ConversationContent,
-  ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
 import {
   Message,
@@ -14,22 +13,19 @@ import {
   MessageResponse,
 } from "@/components/ai-elements/message";
 import { Loader } from "@/components/ai-elements/loader";
-
-/** Extracts plain text from a `UIMessage` by joining all text parts. */
-function getMessageText(message: UIMessage) {
-  return message.parts
-    .filter(isTextUIPart)
-    .map((part) => part.text)
-    .join("");
-}
+import {
+  isWebSearchPart,
+  WebSearchPart,
+} from "@/features/conversation/components/web-search-part";
 
 type ChatMessagesProps = {
-  messages: UIMessage[];
+  messages: ChatUIMessage[];
   status: ChatStatus;
 };
 
 /**
- * Renders the conversation message list with markdown responses and a loading indicator.
+ * Renders the conversation message list with markdown responses, tool cards,
+ * and a loading indicator while waiting for the first assistant token.
  */
 export function ChatMessages({ messages, status }: ChatMessagesProps) {
   const isWaiting =
@@ -41,7 +37,34 @@ export function ChatMessages({ messages, status }: ChatMessagesProps) {
         {messages.map((message) => (
           <Message key={message.id} from={message.role}>
             <MessageContent>
-              <MessageResponse>{getMessageText(message)}</MessageResponse>
+              {message.parts.map((part, index) => {
+                if (isTextUIPart(part)) {
+                  if (!part.text) return null;
+
+                  return (
+                    <MessageResponse
+                      key={`${message.id}-text-${index}`}
+                      isAnimating={
+                        status === "streaming" &&
+                        message.id === messages.at(-1)?.id
+                      }
+                    >
+                      {part.text}
+                    </MessageResponse>
+                  );
+                }
+
+                if (isWebSearchPart(part)) {
+                  return (
+                    <WebSearchPart
+                      key={`${message.id}-${part.toolCallId}`}
+                      part={part}
+                    />
+                  );
+                }
+
+                return null;
+              })}
             </MessageContent>
           </Message>
         ))}
@@ -54,7 +77,6 @@ export function ChatMessages({ messages, status }: ChatMessagesProps) {
           </Message>
         ) : null}
       </ConversationContent>
-   
     </Conversation>
   );
 }

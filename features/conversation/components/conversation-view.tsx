@@ -2,7 +2,8 @@
 import { Separator } from '@/components/ui/separator';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useQueryClient } from '@tanstack/react-query';
-import { DefaultChatTransport, type UIMessage } from 'ai';
+import { DefaultChatTransport } from 'ai';
+import type { ChatUIMessage } from '@/features/ai/tools/types';
 import { useChat } from "@ai-sdk/react"
 import React, { useMemo } from 'react'
 import { useConversations } from '../hooks/use-conversation';
@@ -14,7 +15,7 @@ import { ChatComposer } from './chat-composer';
 
 type ConversationViewProps = {
     conversationId: string;
-    initialMessages: UIMessage[];
+    initialMessages: ChatUIMessage[];
 };
 
 /**
@@ -34,7 +35,7 @@ export const ConversationView = ({ conversationId, initialMessages }: Conversati
         })
     }), []);
 
-    const { messages, sendMessage, status } = useChat({
+    const { messages, sendMessage, status } = useChat<ChatUIMessage>({
         id: conversationId,
         messages: initialMessages,
         transport,
@@ -54,7 +55,7 @@ export const ConversationView = ({ conversationId, initialMessages }: Conversati
         <div className="flex h-full min-h-0 flex-1 flex-col">
             <header className="flex h-14 shrink-0 items-center gap-2 border-b px-3">
                 <SidebarTrigger />
-                <Separator orientation="vertical" className="mx-1 h-4" />
+                <Separator orientation="vertical" className="mx-1 " />
                 <h1 className="truncate text-sm font-medium">{title}</h1>
             </header>
 
