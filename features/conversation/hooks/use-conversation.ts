@@ -6,7 +6,10 @@ import { toast } from "sonner";
 
 import {
     createConversation,
+    createConversationBranch,
     deleteConversation,
+    deleteConversationBranch,
+    listConversationBranches,
     listConversations,
     updateConversation,
 } from "@/features/conversation/actions/conversation-actions";
@@ -96,5 +99,47 @@ export function useDeleteConversation(activeId?: string) {
         onError: (error: Error) => {
             toast.error(error.message || "Could not delete chat");
         },
+    });
+}
+
+/** Fetch all branches for a given conversation. */
+export function useConversationBranches(conversationId: string) {
+    return useQuery({
+        queryKey: queryKeys.conversations.branches(conversationId),
+        queryFn: () => listConversationBranches(conversationId),
+    });
+}
+
+/** Create a new conversation branch. */
+export function useCreateConversationBranch() {
+    const queryClient = useQueryClient();
+    const router = useRouter();
+    return useMutation({
+        mutationFn: ({ conversationId, branchPointMessageId }: {
+            conversationId: string;
+            branchPointMessageId: string;
+        }) => createConversationBranch(conversationId, branchPointMessageId),
+        onSuccess: (branch) => {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.conversations.branches(branch.parentConversationId ?? branch.id) });
+            router.push(`/c/${branch.id}`);
+        },
+        onError: (error: Error) => toast.error(error.message || "Could not create branch"),
+    });
+}
+
+/** Delete a conversation branch. */
+export function useDeleteConversationBranch(activeId: string) {
+    const queryClient = useQueryClient();
+    const router = useRouter();
+    return useMutation({
+        mutationFn: () => deleteConversationBranch(activeId),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all });
+            queryClient.removeQueries({ queryKey: queryKeys.conversations.branches(activeId) });
+            router.push("/");
+            toast.success("Branch deleted");
+        },
+        onError: (error: Error) => toast.error(error.message || "Could not delete branch"),
     });
 }

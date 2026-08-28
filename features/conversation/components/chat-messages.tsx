@@ -11,7 +11,10 @@ import {
   Message,
   MessageContent,
   MessageResponse,
+  MessageActions,
+  MessageAction,
 } from "@/components/ai-elements/message";
+import { GitBranchIcon } from "lucide-react";
 import { Loader } from "@/components/ai-elements/loader";
 import {
   isWebSearchPart,
@@ -21,13 +24,14 @@ import {
 type ChatMessagesProps = {
   messages: ChatUIMessage[];
   status: ChatStatus;
+  onCreateBranch?: (messageId: string) => void;
 };
 
 /**
  * Renders the conversation message list with markdown responses, tool cards,
  * and a loading indicator while waiting for the first assistant token.
  */
-export function ChatMessages({ messages, status }: ChatMessagesProps) {
+export function ChatMessages({ messages, status, onCreateBranch }: ChatMessagesProps) {
   const isWaiting =
     status === "submitted" && messages.at(-1)?.role === "user";
 
@@ -66,6 +70,13 @@ export function ChatMessages({ messages, status }: ChatMessagesProps) {
                 return null;
               })}
             </MessageContent>
+            {onCreateBranch && status === "ready" ? (
+              <MessageActions className="opacity-0 transition-opacity group-hover:opacity-100">
+                <MessageAction tooltip="Create branch" label="Create branch" onClick={() => onCreateBranch(message.id)}>
+                  <GitBranchIcon />
+                </MessageAction>
+              </MessageActions>
+            ) : null}
           </Message>
         ))}
 

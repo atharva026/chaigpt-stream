@@ -6,12 +6,13 @@ import { DefaultChatTransport } from 'ai';
 import type { ChatUIMessage } from '@/features/ai/tools/types';
 import { useChat } from "@ai-sdk/react"
 import React, { useMemo } from 'react'
-import { useConversations } from '../hooks/use-conversation';
+import { useConversations, useCreateConversationBranch } from '../hooks/use-conversation';
 import { queryKeys } from '../utils/query-keys';
 import { toast } from 'sonner';
 import { ChatEmpty } from './chat-empty';
 import { ChatMessages } from './chat-messages';
 import { ChatComposer } from './chat-composer';
+import { BranchSwitcher } from './branch-switcher';
 
 type ConversationViewProps = {
     conversationId: string;
@@ -25,6 +26,7 @@ export const ConversationView = ({ conversationId, initialMessages }: Conversati
 
     const queryClient = useQueryClient();
     const { data: conversations } = useConversations();
+    const createBranch = useCreateConversationBranch();
 
     const transport = useMemo(() => new DefaultChatTransport({
         api: "/api/chat",
@@ -57,12 +59,22 @@ export const ConversationView = ({ conversationId, initialMessages }: Conversati
                 <SidebarTrigger />
                 <Separator orientation="vertical" className="mx-1 " />
                 <h1 className="truncate text-sm font-medium">{title}</h1>
+                <BranchSwitcher conversationId={conversationId} />
             </header>
 
             {messages.length === 0 ? (
                 <ChatEmpty />
             ) : (
-                <ChatMessages messages={messages} status={status} />
+                <ChatMessages
+                    messages={messages}
+                    status={status}
+                    onCreateBranch={(messageId) =>
+                        createBranch.mutate({
+                            conversationId,
+                            branchPointMessageId: messageId,
+                        })
+                    }
+                />
             )}
 
             <ChatComposer

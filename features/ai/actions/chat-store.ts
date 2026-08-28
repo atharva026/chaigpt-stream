@@ -71,18 +71,47 @@ function toUIMessageParts(
 export async function loadChatMessages(
   conversationId: string
 ): Promise<ChatUIMessage[]> {
+  // Load all visible messages in order, including inherited messages from parent conversations.
+  const conversation = await prisma.conversation.findUniqueOrThrow({
+    where: { id: conversationId },
+    select: { parentConversationId: true, branchPointMessageId: true },
+  });
+
+  // Load inherited messages from parent conversations, if any, and slice through the branch point if applicable.
+  // (Recursive call to loadChatMessages ensures that we get the full chain of inherited messages.)
+  const inherited = conversation.parentConversationId
+    ? await loadChatMessages(conversation.parentConversationId)
+    : [];
+  
+  // If there is a branch point, slice the inherited messages to include only those up to and including the branch point message.
+  const inheritedThroughBranchPoint =
+    conversation.parentConversationId && conversation.branchPointMessageId
+      ? (() => {
+          const pointIndex = inherited.findIndex(
+            (message) => message.id === conversation.branchPointMessageId,
+          );
+          if (pointIndex < 0) {
+            throw new Error("Branch point message not found in parent conversation");
+          }
+          return inherited.slice(0, pointIndex + 1);
+        })()
+      : inherited;
+
   const rows = await prisma.message.findMany({
     where: { conversationId },
     orderBy: { createdAt: "asc" },
   });
 
-  return rows
+  // Filter out system messages and convert to UIMessage shape, falling back to a single text part if no structured parts are stored.
+  const localMessages = rows
     .filter((row) => row.role !== "SYSTEM")
     .map((row) => ({
       id: row.id,
       role: toUIMessageRole(row.role),
       parts: toUIMessageParts(row.parts, row.content),
     }));
+    
+  return [...inheritedThroughBranchPoint, ...localMessages];
 }
 
 type SaveChatMessagesOptions = {

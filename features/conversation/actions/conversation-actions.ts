@@ -15,6 +15,16 @@ export type ConversationListItem = {
     updatedAt: Date;
 };
 
+/** Shape of a conversation branch row. */
+export type BranchListItem = {
+    id: string;
+    title: string;
+    parentConversationId: string | null;
+    branchPointMessageId: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+};
+
 
 /**
  * Verifies that a conversation exists and belongs to the given user.
@@ -56,7 +66,7 @@ export async function listConversations(): Promise<ConversationListItem[]> {
     const user = await requireUser();
 
     return prisma.conversation.findMany({
-        where: { userId: user.id, isArchived: false },
+        where: { userId: user.id, isArchived: false, parentConversationId: null },
         orderBy: [{ isPinned: "desc" }, { lastMessageAt: "desc" }],
         select: {
             id: true,
@@ -68,6 +78,155 @@ export async function listConversations(): Promise<ConversationListItem[]> {
             updatedAt: true,
         },
     })
+}
+
+/** Lists all branches in the active conversation's lineage tree. */
+export async function listConversationBranches(conversationId: string): Promise<BranchListItem[]> {
+    const user = await requireUser();
+    await assertOwnsConversation(conversationId, user.id);
+
+    const conversations = await prisma.conversation.findMany({
+        where: { userId: user.id, isArchived: false },
+        select: {
+            id: true,
+            title: true,
+            parentConversationId: true,
+            branchPointMessageId: true,
+            createdAt: true,
+            updatedAt: true,
+        },
+        orderBy: { createdAt: "asc" },
+    });
+
+    const byId = new Map(conversations.map((conversation) => [conversation.id, conversation]));
+    let rootId = conversationId;
+    
+    while (byId.get(rootId)?.parentConversationId) {
+        rootId = byId.get(rootId)!.parentConversationId!;
+    }
+
+    return conversations.filter((conversation) => {
+        let current: BranchListItem | undefined = conversation;
+        while (current?.parentConversationId) {
+            current = byId.get(current.parentConversationId);
+        }
+        return current?.id === rootId;
+    });
+}
+
+/** Creates a child branch at any message visible in the source lineage. */
+export async function createConversationBranch(
+    conversationId: string,
+    branchPointMessageId: string,
+    title?: string,
+) {
+    const user = await requireUser();
+    const source = await assertOwnsConversation(conversationId, user.id);
+    const message = await prisma.message.findUnique({ where: { id: branchPointMessageId } });
+    
+    if (!message || message.role === "SYSTEM") {
+        throw new Error("Branch point message not found");
+    }
+
+    const visibleMessages = await getVisibleMessageIds(conversationId);
+    if (!visibleMessages.has(branchPointMessageId)) {
+        throw new Error("Branch point message is not in this conversation");
+    }
+
+    const branch = await prisma.conversation.create({
+        data: {
+            userId: user.id,
+            title: title?.trim() || `Branch from ${source.title}`,
+            model: source.model,
+            systemPrompt: source.systemPrompt,
+            parentConversationId: conversationId,
+            branchPointMessageId,
+        },
+    });
+
+    revalidatePath(`/c/${conversationId}`);
+    revalidatePath(`/c/${branch.id}`);
+
+    return branch;
+}
+
+/** Fetches the IDs of all visible messages in a conversation. */
+async function getVisibleMessageIds(conversationId: string): Promise<Set<string>> {
+    const conversation = await prisma.conversation.findUniqueOrThrow({
+        where: { id: conversationId },
+        select: { parentConversationId: true, branchPointMessageId: true },
+    });
+
+    const inherited = conversation.parentConversationId
+        ? [...(await getVisibleMessageIdsInOrder(conversation.parentConversationId))]
+        : [];
+
+    const visibleInherited = sliceThroughBranchPoint(
+        inherited,
+        conversation.parentConversationId ? conversation.branchPointMessageId : null,
+    );
+
+    const local = await prisma.message.findMany({
+        where: { conversationId },
+        orderBy: { createdAt: "asc" },
+        select: { id: true },
+    });
+
+    return new Set([...visibleInherited, ...local.map(({ id }) => id)]);
+}
+
+/** Fetches the IDs of all visible messages in a conversation, ordered by creation date. */
+async function getVisibleMessageIdsInOrder(conversationId: string): Promise<string[]> {
+    const conversation = await prisma.conversation.findUniqueOrThrow({
+        where: { id: conversationId },
+        select: { parentConversationId: true, branchPointMessageId: true },
+    });
+
+    const inherited = conversation.parentConversationId
+        ? await getVisibleMessageIdsInOrder(conversation.parentConversationId)
+        : [];
+
+    const visibleInherited = sliceThroughBranchPoint(
+        inherited,
+        conversation.parentConversationId ? conversation.branchPointMessageId : null,
+    );
+
+    const local = await prisma.message.findMany({
+        where: { conversationId },
+        orderBy: { createdAt: "asc" },
+        select: { id: true },
+    });
+
+    return [...visibleInherited, ...local.map(({ id }) => id)];
+}
+
+/** Slices a list of message IDs through a branch point. */
+function sliceThroughBranchPoint(messageIds: string[], branchPointMessageId: string | null) {
+    if (!branchPointMessageId) return messageIds;
+
+    const pointIndex = messageIds.indexOf(branchPointMessageId);
+
+    if (pointIndex < 0) {
+        throw new Error("Branch point message not found in parent conversation");
+    }
+
+    return messageIds.slice(0, pointIndex + 1);
+}
+
+/** Deletes a branch and all descendants; root conversations use deleteConversation. */
+export async function deleteConversationBranch(conversationId: string) {
+    const user = await requireUser();
+    const conversation = await assertOwnsConversation(conversationId, user.id);
+
+    if (!conversation.parentConversationId) {
+        throw new Error("The root conversation cannot be deleted as a branch");
+    }
+
+    await prisma.conversation.delete({ where: { id: conversationId } });
+
+    revalidatePath("/");
+
+    return { id: conversationId };
 }
 
 /**
