@@ -33,7 +33,7 @@ export function BranchSwitcher({ conversationId }: { conversationId: string }) {
   }
 
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-1">
+    <div className="flex min-w-0 w-full items-center gap-1 sm:w-auto sm:flex-1">
       <GitBranchIcon className="size-4 shrink-0 text-muted-foreground" />
       <Select value={conversationId} onValueChange={(value) => value && router.push(`/c/${value}`)}>
         <SelectTrigger size="sm" className="min-w-0 flex-1 border-0 bg-transparent">

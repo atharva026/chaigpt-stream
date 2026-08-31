@@ -55,10 +55,10 @@ export const ConversationView = ({ conversationId, initialMessages }: Conversati
 
     return (
         <div className="flex h-full min-h-0 flex-1 flex-col">
-            <header className="flex h-14 shrink-0 items-center gap-2 border-b px-3">
+            <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b px-3 py-2 sm:h-14 sm:flex-nowrap sm:py-0">
                 <SidebarTrigger />
-                <Separator orientation="vertical" className="mx-1 " />
-                <h1 className="truncate text-sm font-medium">{title}</h1>
+                <Separator orientation="vertical" className="hidden h-5 sm:block" />
+                <h1 className="min-w-0 flex-1 truncate text-sm font-medium sm:flex-none">{title}</h1>
                 <BranchSwitcher conversationId={conversationId} />
             </header>
 
