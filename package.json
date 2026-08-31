@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:full": "npm run prisma:generate && prisma:db:migration:apply && next dev",
-    "build": "npm run prisma:generate && next build",
+    "dev:full": "npm run prisma:generate && npm run prisma:db:migration:apply && next dev",
+    "build": "npm run prisma:generate && npm run prisma:migrate:prod && next build",
     "start": "next start",
     "lint": "eslint",
     "prisma:studio": "prisma studio",
