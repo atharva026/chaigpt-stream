@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "dev:full": "npm run prisma:generate && npm run prisma:db:migration:apply && next dev",
-    "build": "npm run prisma:generate && npm run prisma:migrate:prod && next build",
+    "build": "npm run prisma:generate && next build",
     "start": "next start",
     "lint": "eslint",
     "prisma:studio": "prisma studio",
@@ -16,7 +16,7 @@
     "prisma:db:migration:apply": "prisma migrate dev",
     "prisma:migrate:reset": "prisma migrate reset",
     "prisma:format": "prisma format"
-  },
+  },      
   "dependencies": {
     "@ai-sdk/google": "^4.0.51",
     "@ai-sdk/openai": "^4.0.15",
